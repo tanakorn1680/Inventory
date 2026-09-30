@@ -15,9 +15,10 @@ Task queue พร้อม dependency + parallel execution, Cost control ด้�
 2. รอจน project พร้อม (Vault เปิดใช้งานเป็นค่าเริ่มต้นอยู่แล้ว ไม่ต้องตั้งค่าเพิ่ม)
 3. ไปที่ **SQL Editor** → New query → วางทั้งไฟล์ `supabase/schema.sql` → **Run**
    - ควรเห็น "Success. No rows returned"
-   - ถ้า error กลางทาง: schema สร้างไม่ครบ ให้รัน `supabase/reset.sql` แล้วลองใหม่
+   - **ถ้าเจอ `relation "tasks" already exists` หรือ error คล้ายกัน**: แปลว่ามี schema ค้างจากการรันครั้งก่อน (มักเกิดจากไฟล์ถูกตัดตอนกลางคันตอนวาง แล้วตารางบางส่วนถูกสร้างไปแล้ว) — รัน `supabase/reset.sql` ก่อน แล้วรัน `schema.sql` ใหม่ทั้งไฟล์ ตรวจให้แน่ใจว่าวางครบถึงบรรทัดสุดท้ายจริง ๆ (จบด้วย `alter default privileges in schema public revoke all on sequences from anon;`)
 4. วางทั้งไฟล์ `supabase/tests/rls_test.sql` → **Run**
    - ต้องเห็น `NOTICE: ALL RLS TESTS PASSED` ที่ท้าย log
+   - อาจเห็น `NOTICE` หรือ `WARNING` สีเหลืองเกี่ยวกับ `SET ROLE postgres` ระหว่างทาง — **อันนี้ปกติ ไม่ใช่ความล้มเหลว** เทสต์จุดนั้นตรวจสอบเรื่อง role permission จากหลายมุมพร้อมกันเพื่อความชัวร์ ตราบใดที่ไม่มีบรรทัดขึ้นต้นด้วย `FAIL` และจบด้วย `ALL RLS TESTS PASSED` แปลว่าผ่านหมด
    - ถ้าเห็น error ที่ขึ้นต้นด้วย `FAIL [...]` — **อย่าเพิ่ง deploy** ส่งข้อความ error นั้นกลับมา
    - ไฟล์นี้ทำงานใน transaction เดียวและ `rollback` ท้ายไฟล์เอง จึงไม่ทิ้งข้อมูลทดสอบไว้จริง
 5. ไปที่ **Project Settings → API** เก็บ 3 ค่านี้ไว้:
