@@ -459,10 +459,18 @@ begin
   if (select auth.uid()) is null then
     return new;
   end if;
-  -- ฟังก์ชันระบบที่ผู้ใช้เรียกได้ (เช่น recover_my_project) ตั้งธงนี้ภายในธุรกรรม
-  -- is_local = true → ธงหายเองเมื่อจบธุรกรรม ผู้ใช้ตั้งเองผ่าน API ไม่ได้ผลเพราะ
-  -- ต้องเป็นค่าที่ตั้งภายในฟังก์ชัน security definer ของเราเท่านั้น
-  if current_setting('app.system_task_update', true) = 'on' then
+  -- ผู้ใช้เรียกผ่านฟังก์ชัน security definer ของเรา (เช่น recover_my_project) → ผ่านได้
+  --
+  -- เดิมจุดนี้เช็คจาก current_setting('app.system_task_update') ที่ผู้เรียกตั้งเอง
+  -- ก่อนเรียก UPDATE ซึ่งเป็นช่องโหว่จริง: set_config() เป็นฟังก์ชันมาตรฐานที่ role
+  -- authenticated เรียกได้เสมอสำหรับ custom GUC (ไม่ต้องมีสิทธิ์พิเศษแบบ superuser-only
+  -- parameter) ผู้ใช้จึงตั้งค่านี้เองก่อน UPDATE ตรง ๆ แล้วหลอก trigger ได้
+  --
+  -- current_user คือแนวป้องกันที่แท้จริง: security definer function รันด้วยสิทธิ์ของ
+  -- เจ้าของฟังก์ชัน (ผู้สร้าง schema นี้ ปกติคือ postgres) ไม่ใช่สิทธิ์ของผู้เรียก และ
+  -- ผู้ใช้ authenticated ไม่มีทาง SET ROLE เป็นเจ้าของฟังก์ชันได้เอง (ไม่ได้ grant สิทธิ์
+  -- SET ROLE ให้ authenticated ไว้เลย) — ค่านี้จึงปลอมไม่ได้จากฝั่งผู้เรียก
+  if current_user in ('postgres', 'supabase_admin') then
     return new;
   end if;
 
@@ -842,7 +850,9 @@ begin
   if not public.is_project_owner(p_project_id) then
     raise exception 'not allowed' using errcode = '42501';
   end if;
-  perform set_config('app.system_task_update', 'on', true);
+  -- ไม่ต้องตั้ง flag ใด ๆ อีกต่อไป — guard_task_status_change ผ่านให้ฟังก์ชันนี้ได้เอง
+  -- เพราะฟังก์ชันนี้เป็น security definer จึงรันด้วยสิทธิ์เจ้าของฟังก์ชัน (current_user
+  -- เปลี่ยนไปเป็นเจ้าของฟังก์ชันจริงระหว่างรันฟังก์ชันนี้) ดู guard_task_status_change
   return public.recover_stuck_tasks(p_project_id, p_older_than_seconds);
 end;
 $$;

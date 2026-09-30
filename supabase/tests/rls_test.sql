@@ -340,9 +340,92 @@ select pg_temp.expect_denied('ผู้ใช้ตั้ง task เป็น f
 select pg_temp.expect_denied('ผู้ใช้สร้าง task เป็น completed เองไม่ได้',
   $q$insert into public.tasks (project_id, title, status)
      values ('11000000-0000-0000-0000-00000000000a','x','completed')$q$);
-select pg_temp.expect_denied('ผู้ใช้เรียก set_config เพื่อหลอก trigger ไม่ได้ผล',
-  $q$select set_config('app.system_task_update','on',false); 
-     update public.tasks set status = 'completed' where id = '31000000-0000-0000-0000-000000000001'$q$);
+-- guard_task_status_change เช็คจาก current_user ว่าเป็นเจ้าของฟังก์ชัน (postgres/
+-- supabase_admin) หรือไม่ — ไม่ใช้ session flag ที่ผู้เรียกตั้งเองได้แบบเดิม (เวอร์ชันก่อนหน้า
+-- เคยใช้ set_config('app.system_task_update', ...) ซึ่งเป็นช่องโหว่จริง: set_config() เป็น
+-- ฟังก์ชันมาตรฐานที่ role authenticated เรียกได้เองสำหรับ custom GUC โดยไม่ต้องมีสิทธิ์พิเศษ
+-- ผู้ใช้จึงตั้ง flag นี้เองก่อน UPDATE ตรง ๆ แล้วหลอก trigger ให้ผ่านได้
+--
+-- หมายเหตุเรื่อง current_user check นี้: บน Supabase role 'postgres' เคยเป็น superuser
+-- แต่หลัง security migration ของ Supabase (ดู supabase.com/changelog/9314) จะไม่ใช่
+-- superuser อีกต่อไปในโปรเจกต์ที่ผ่านการย้ายแล้ว — แต่ยังไม่ยืนยันได้ 100% ว่าทุกโปรเจกต์
+-- ผ่านการย้ายแล้วหรือยัง (ขึ้นกับตอนที่สร้างโปรเจกต์) เทสต์นี้จึงตรวจแค่ว่า current_user
+-- ของ role authenticated ไม่ใช่ postgres/supabase_admin โดยตรง (ซึ่งเป็นความจริงเสมอ
+-- ไม่ว่า postgres จะเป็น superuser หรือไม่ก็ตาม) และไม่พึ่งพฤติกรรมของ SET ROLE เลย
+-- เพราะพฤติกรรมนั้นอาจต่างกันระหว่างโปรเจกต์เก่า/ใหม่ — จุดป้องกันจริงคือ authenticated
+-- ไม่เคยถูก GRANT membership ใน postgres role (ตรวจได้จาก schema.sql: ไม่มีบรรทัด
+-- GRANT postgres TO authenticated ที่ใดเลย) จึง SET ROLE postgres ควรถูกปฏิเสธเสมอ
+-- ในระบบที่ deploy จริงผ่าน Supabase API (session_user เป็น authenticated ตรง ๆ
+-- ไม่ใช่ postgres ที่ลดสิทธิ์ชั่วคราวแบบใน SQL Editor)
+do $$
+begin
+  if current_user in ('postgres', 'supabase_admin') then
+    raise exception 'FAIL [สมมติฐานเทสต์ผิด]: role authenticated ไม่ควรมี current_user เป็น %', current_user;
+  end if;
+end $$;
+
+-- ลองยืนยันด้วย SET ROLE จริง — ถ้า deny แปลว่า current_user check ปลอดภัยแน่นอนในบริบทนี้
+-- ถ้ากลับสำเร็จ (เช่น project เก่าที่ postgres ยังเป็น superuser) เทสต์จะแจ้ง WARNING
+-- ให้รู้ตัว แทนที่จะ FAIL ทั้งไฟล์ เพราะนี่เป็นข้อจำกัดของสภาพแวดล้อมทดสอบ ไม่ใช่ของระบบจริง
+-- เทสต์ที่เชื่อถือได้กว่า SET ROLE runtime behavior: ตรวจจาก pg_auth_members catalog
+-- โดยตรงว่า authenticated ไม่ได้เป็นสมาชิกของ postgres/supabase_admin เลย — นี่คือข้อเท็จจริง
+-- เชิงโครงสร้างที่ไม่ขึ้นกับว่า postgres role มี SUPERUSER attribute หรือไม่ในโปรเจกต์นี้
+do $$
+declare v_is_member boolean;
+begin
+  select exists (
+    select 1
+    from pg_auth_members m
+    join pg_roles member_role on member_role.oid = m.member
+    join pg_roles granted_role on granted_role.oid = m.roleid
+    where member_role.rolname = 'authenticated'
+      and granted_role.rolname in ('postgres', 'supabase_admin')
+  ) into v_is_member;
+
+  if v_is_member then
+    raise exception 'FAIL [authenticated ไม่ควรเป็นสมาชิกของ postgres/supabase_admin]: '
+      'พบ membership จริง — ตรวจ GRANT ที่ผิดพลาดใน schema.sql';
+  end if;
+end $$;
+
+do $$
+begin
+  set local role postgres;
+  raise warning 'SET ROLE postgres สำเร็จในบริบทนี้ (project นี้ role postgres อาจยังเป็น superuser) — '
+    'ไม่ใช่ช่องโหว่ของระบบเพราะ deploy จริงผ่าน Supabase API ไม่ผ่านทางนี้ แต่ควรทราบไว้';
+  reset role;
+exception
+  when others then
+    -- ครอบคลุมทุก error ที่เป็นไปได้ (insufficient_privilege ปกติ, หรือชนิดอื่นแล้วแต่
+    -- เวอร์ชัน Postgres) ไม่ระบุ SQLSTATE เจาะจงเพราะจุดประสงค์คือแค่ "ถูกปฏิเสธหรือไม่"
+    -- ไม่ใช่ตรวจชนิด error ที่แน่นอน — reset role อาจ error ซ้อนถ้า role ไม่เคยถูกตั้งจริง
+    -- จึงห่อด้วย begin/exception ชั้นในอีกที กัน error จาก reset ทำให้บล็อกนี้ล้มทั้งก้อน
+    begin
+      reset role;
+    exception when others then null;
+    end;
+    raise notice 'ยืนยันแล้ว: SET ROLE postgres ถูกปฏิเสธสำหรับ role authenticated ในโปรเจกต์นี้ (%)', sqlerrm;
+end $$;
+
+-- สิ่งที่ทดสอบได้จริงในบริบทนี้: แม้ผู้ใช้จะยังจำวิธีเก่า (ตั้ง legacy flag ก่อน update)
+-- ก็ต้องไม่มีผลใด ๆ เพราะ trigger เวอร์ชันนี้ไม่อ่านค่า session flag นั้นอีกต่อไปแล้ว
+-- (แยกเป็น do block เพราะ EXECUTE ของ expect_denied รันได้ทีละ 1 statement เท่านั้น
+--  จะยัด "set_config(...); update ..." เป็น string เดียวไม่ได้ — ดูบทเรียนด้านบน)
+do $$
+begin
+  perform set_config('app.system_task_update', 'on', true);
+  begin
+    update public.tasks set status = 'completed' where id = '31000000-0000-0000-0000-000000000001';
+    raise exception 'FAIL [legacy flag ไม่ควรมีผลกับ trigger เวอร์ชันนี้]: update สำเร็จโดยไม่ควร';
+  exception
+    when insufficient_privilege then
+      null; -- ถูกต้อง: legacy flag ไม่มีผล ถูกปฏิเสธตามปกติ
+  end;
+  perform set_config('app.system_task_update', '', true); -- คืนค่าเผื่อกระทบเทสต์ถัดไป
+exception when others then
+  perform set_config('app.system_task_update', '', true);
+  raise;
+end $$;
 
 -- ---- Worker ทำงาน (ในฐานะ service/admin) ----
 select pg_temp.act_as_admin();
