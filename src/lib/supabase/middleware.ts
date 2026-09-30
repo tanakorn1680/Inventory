@@ -31,11 +31,7 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
   const isAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/signup')
-  const isAppRoute = pathname.startsWith('/office') ||
-    pathname.startsWith('/workspace') ||
-    pathname.startsWith('/workers') ||
-    pathname.startsWith('/usage') ||
-    pathname.startsWith('/settings')
+  const isAppRoute = pathname.startsWith('/projects') || pathname.startsWith('/settings')
 
   if (!user && isAppRoute) {
     const url = request.nextUrl.clone()
@@ -45,13 +41,13 @@ export async function updateSession(request: NextRequest) {
 
   if (user && isAuthRoute) {
     const url = request.nextUrl.clone()
-    url.pathname = '/office'
+    url.pathname = '/projects'
     return NextResponse.redirect(url)
   }
 
   if (user && pathname === '/') {
     const url = request.nextUrl.clone()
-    url.pathname = '/office'
+    url.pathname = '/projects'
     return NextResponse.redirect(url)
   }
 
