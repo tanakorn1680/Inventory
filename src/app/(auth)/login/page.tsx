@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -26,98 +26,53 @@ export default function LoginPage() {
       return
     }
 
-    router.push('/office')
+    router.push('/projects')
     router.refresh()
   }
 
   return (
-    <div style={{ width: '100%', maxWidth: 400 }}>
-      {/* Logo */}
-      <div style={{ textAlign: 'center', marginBottom: 32 }}>
-        <div style={{
-          width: 48, height: 48,
-          background: 'var(--accent-primary)',
-          borderRadius: 12,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 24, margin: '0 auto 12px',
-          boxShadow: '0 0 32px rgba(99,102,241,0.3)',
-        }}>
-          🏢
+    <div>
+      <h1 className="mb-1 text-center text-2xl font-semibold text-white">Multi-Agent Workspace</h1>
+      <p className="mb-6 text-center text-sm text-neutral-400">เข้าสู่ระบบเพื่อจัดการทีม AI ของคุณ</p>
+
+      <form onSubmit={handleLogin} className="space-y-4 rounded-xl border border-neutral-800 bg-neutral-900 p-6">
+        <div>
+          <label className="mb-1 block text-sm text-neutral-300">อีเมล</label>
+          <input
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+            className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-white outline-none focus:border-indigo-500"
+          />
         </div>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#fff', margin: 0 }}>
-          AI Office
-        </h1>
-        <p style={{ color: 'var(--text-secondary)', marginTop: 4, fontSize: '0.875rem' }}>
-          Sign in to your workspace
+        <div>
+          <label className="mb-1 block text-sm text-neutral-300">รหัสผ่าน</label>
+          <input
+            type="password"
+            required
+            autoComplete="current-password"
+            value={password}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
+            className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-white outline-none focus:border-indigo-500"
+          />
+        </div>
+
+        {error && <p className="text-sm text-red-400">{error}</p>}
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full rounded-md bg-indigo-600 py-2 font-medium text-white transition hover:bg-indigo-500 disabled:opacity-50"
+        >
+          {loading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}
+        </button>
+
+        <p className="text-center text-sm text-neutral-400">
+          ยังไม่มีบัญชี? <Link href="/signup" className="text-indigo-400 hover:underline">สมัครสมาชิก</Link>
         </p>
-      </div>
-
-      {/* Card */}
-      <div className="card" style={{ padding: 24 }}>
-        <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div>
-            <label className="label">Email</label>
-            <input
-              className="input"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-            />
-          </div>
-
-          <div>
-            <label className="label">Password</label>
-            <input
-              className="input"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-            />
-          </div>
-
-          {error && (
-            <div style={{
-              background: 'rgba(239,68,68,0.1)',
-              border: '1px solid rgba(239,68,68,0.2)',
-              borderRadius: 8,
-              padding: '10px 12px',
-              fontSize: '0.875rem',
-              color: '#f87171',
-            }}>
-              {error}
-            </div>
-          )}
-
-          <button
-            className="btn btn-primary btn-md"
-            type="submit"
-            disabled={loading}
-            style={{ marginTop: 4 }}
-          >
-            {loading ? (
-              <>
-                <span className="animate-spin" style={{ display: 'inline-block', width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%' }} />
-                Signing in…
-              </>
-            ) : 'Sign in'}
-          </button>
-        </form>
-
-        <div style={{ textAlign: 'center', marginTop: 20 }}>
-          <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-            No account?{' '}
-          </span>
-          <Link href="/signup" style={{ color: 'var(--accent-hover)', fontSize: '0.875rem', textDecoration: 'none' }}>
-            Sign up
-          </Link>
-        </div>
-      </div>
+      </form>
     </div>
   )
 }
