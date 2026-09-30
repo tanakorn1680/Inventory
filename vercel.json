@@ -1,33 +1,11 @@
 {
   "functions": {
-    "src/app/api/ai/chat/route.ts": {
-      "maxDuration": 120
+    "src/app/api/worker/run-task/route.ts": {
+      "experimentalTriggers": [{ "type": "queue/v2beta", "topic": "agent-tasks" }],
+      "maxDuration": 300
     }
   },
-  "headers": [
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "X-XSS-Protection", "value": "1; mode=block" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
-      ]
-    },
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" }
-      ]
-    }
-  ],
-  "rewrites": [],
-  "redirects": [
-    {
-      "source": "/",
-      "destination": "/office",
-      "permanent": false
-    }
+  "crons": [
+    { "path": "/api/worker/recover", "schedule": "0 * * * *" }
   ]
 }
